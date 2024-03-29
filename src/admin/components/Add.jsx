@@ -401,7 +401,7 @@ const Add = () => {
                 console.log(routes)
                 console.log(compartments)
                 console.log(classData)
-                axios.post('http://localhost:3000/api/admin/addTrain',{trainData,routes,compartments,classData},{
+                axios.post('https://railquest.onrender.com/api/admin/addTrain',{trainData,routes,compartments,classData},{
                   headers:{
                     'x-access-token':localStorage.getItem('token')
                   }

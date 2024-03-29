@@ -29,7 +29,7 @@ const Profile = () => {
         if(!localStorage.getItem('token'))
         return navigate('/')
 
-        axios.get('http://localhost:3000/api/user',{
+        axios.get('https://railquest.onrender.com/api/user',{
            headers:{
                'x-access-token':localStorage.getItem('token')
            }
@@ -39,7 +39,7 @@ const Profile = () => {
      const recentTransaction = (e) =>{
        e.preventDefault()
        
-       axios.get('http://localhost:3000/api/recent-transactions',{
+       axios.get('https://railquest.onrender.com/api/recent-transactions',{
         headers:{
             'x-access-token':localStorage.getItem('token')
         }
@@ -57,7 +57,7 @@ const Profile = () => {
     
     const recentBookings = (e) =>{
       e.preventDefault()
-      axios.get('http://localhost:3000/api/recent-bookings',{
+      axios.get('https://railquest.onrender.com/api/recent-bookings',{
         headers:{
             'x-access-token':localStorage.getItem('token')
         }
@@ -75,7 +75,7 @@ const Profile = () => {
 
     const fetchTicketDetails = (PNR) =>{
      
-      axios.post('http://localhost:3000/api/fetch-ticket',{PNR},{
+      axios.post('https://railquest.onrender.com/api/fetch-ticket',{PNR},{
         headers:{
           'x-access-token':localStorage.getItem('token')
         }
@@ -86,7 +86,7 @@ const Profile = () => {
     }
 
     const cancelTicket = (PNR) => {
-      axios.post('http://localhost:3000/api/cancel-ticket',{PNR},{
+      axios.post('https://railquest.onrender.com/api/cancel-ticket',{PNR},{
         headers:{
           'x-access-token':localStorage.getItem('token')
         }

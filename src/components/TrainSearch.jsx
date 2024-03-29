@@ -22,7 +22,7 @@ const TrainSearch = () => {
     const searchHandler = (e) =>{
       console.log(date)
       e.preventDefault()
-      axios.get(`http://localhost:3000/api/search?src=${src}&dest=${dest}&date=${date}`)
+      axios.get(`https://railquest.onrender.com/api/search?src=${src}&dest=${dest}&date=${date}`)
       .then(response=>{
           setIsLoading(true)
           setTimeout(()=>{

@@ -8,7 +8,7 @@ export default function Register() {
     const [username,setUserName] = useState('')
     function registerUser(e){
         e.preventDefault()
-        axios.post('http://localhost:3000/api/register',{email,password,username})
+        axios.post('https://railquest.onrender.com/api/register',{email,password,username})
         .then(res=>{
 
             alert(res.data.message)

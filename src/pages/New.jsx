@@ -62,7 +62,7 @@ const New = () => {
     setDestination(destinationRef.current.value)
     e.preventDefault()
     
-    axios.get(`http://localhost:3000/api/search?src=${sourceRef.current.value}&dest=${destinationRef.current.value}&date=${date}`)
+    axios.get(`https://railquest.onrender.com/api/search?src=${sourceRef.current.value}&dest=${destinationRef.current.value}&date=${date}`)
     .then(response=>{
         setIsLoading(true)
         setCrucks({source:sourceRef.current.value,destination:destinationRef.current.value,date:date})

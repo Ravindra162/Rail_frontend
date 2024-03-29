@@ -89,7 +89,7 @@ const Add_date = () => {
 <Button color='primary'
 onClick={()=>{
 
-    axios.post('http://localhost:3000/api/admin/add_date',{
+    axios.post('https://railquest.onrender.com/api/admin/add_date',{
         trainNumber:trainRef.current.value,
         classData:classData,
         date:dateRef.current.value

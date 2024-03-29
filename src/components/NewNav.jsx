@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 const NewNav = ({color}) => {
   const navigate = useNavigate()
   useEffect(()=>{
-    axios.get('http://localhost:3000/api/user',{
+    axios.get('https://railquest.onrender.com/api/user',{
        headers:{
            'x-access-token':localStorage.getItem('token')
        }

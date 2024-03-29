@@ -16,7 +16,7 @@ const Navbar = () => {
   const navigate = useNavigate()
   const [name,setName] = useRecoilState(userAtom)
   useEffect(()=>{
-    axios.get('http://localhost:3000/api/user',{
+    axios.get('https://railquest.onrender.com/api/user',{
        headers:{
            'x-access-token':localStorage.getItem('token')
        }

@@ -48,7 +48,7 @@ const Passenger = () => {
     { 
       
     
-    axios.post('http://localhost:3000/api/payment',{ticketInfo:ticket,userId:username.userId,passengers,payment:payment},{
+    axios.post('https://railquest.onrender.com/api/payment',{ticketInfo:ticket,userId:username.userId,passengers,payment:payment},{
       headers:{
         'x-access-token':localStorage.getItem('token')
       }
@@ -56,7 +56,7 @@ const Passenger = () => {
       console.log(res.data.payment_id)
       if(res.data.isDone===true){
         alert('Payment Done')
-        axios.post('http://localhost:3000/api/book-ticket',{ticketDetails:ticket,userId:username.userId,passengers,crucks,payment_id:res.data.payment_id}
+        axios.post('https://railquest.onrender.com/api/book-ticket',{ticketDetails:ticket,userId:username.userId,passengers,crucks,payment_id:res.data.payment_id}
         ,{
           headers:{
             'x-access-token':localStorage.getItem('token')
