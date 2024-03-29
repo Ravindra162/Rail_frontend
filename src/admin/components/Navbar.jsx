@@ -26,7 +26,11 @@ const Navbar = () => {
     <div className='h-16 w-full bg-slate-100 flex justify-between gap-0 items-center'>
       <button className='basis-1/2 ml-10'><div className='float-left text-blue-500 text-2xl font-extrabold'>RailQuest</div></button>
      <button className='transition ease-in-out delay-400 text-black mx-10 w-36 h-12 hover:bg-[#167CD8] hover:text-white rounded-xl'>Cancellation Requests</button>
-     <button className='transition ease-in-out delay-400 text-black mx-10 w-36 h-12 hover:bg-[#167CD8] hover:text-white rounded-xl'>Add train</button>
+     <button className='transition ease-in-out delay-400 text-black mx-10 w-36 h-12 hover:bg-[#167CD8] hover:text-white rounded-xl'
+     onClick={()=>{
+      navigate('/admin/add_date')
+     }}
+     >Add train</button>
      <button className='mr-10'>
      <Dropdown className='mx-10'>
       <DropdownTrigger>

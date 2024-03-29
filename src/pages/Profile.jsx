@@ -96,7 +96,8 @@ const Profile = () => {
     }
 
   return (
-    <div>
+    <div className='h-screen w-full bg-gradient-to-r from-[#591979] via-[#991986] to-[#591979] text-white '>
+      <div>
     <div>Profile</div>
     <div>Username:{user.username}</div>
     <div>E-mail:{user.email}</div>
@@ -106,8 +107,9 @@ const Profile = () => {
     <Button color="primary" onClick={recentBookings}>
       Your Bookings
     </Button>
+    </div>
     {showTransactions&&
-    <div className='m-5'>
+    <div className='h-1/3 w-1/2'>
       <div className='w-2/5 h-[20px] flex flex-row justify-between items-center'>
         <h3 className='font-extrabold'>transaction-id</h3>
         <h3 className='font-extrabold'>Amount Paid</h3>
@@ -125,7 +127,7 @@ const Profile = () => {
      })}
     </ScrollShadow>
     </div>}
-    {showBookings&&<div>
+    {showBookings&&<div className='h-1/3 w-3/4'>
       <div className='w-3/5 h-[20px] flex flex-row justify-between items-center'>
         <h3 className='font-extrabold'>PNR</h3>
         <h3 className='font-extrabold'>Train Number</h3>

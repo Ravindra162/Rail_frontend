@@ -19,9 +19,3 @@ input[type="date"]{
   outline: none;
   border-radius: 5px;
 }
-::-webkit-calendar-picker-indicator{
-  background-color: ;
-  padding: 5px;
-  cursor: pointer;
-  border-radius: 3px;
-}

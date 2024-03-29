@@ -407,6 +407,10 @@ const Add = () => {
                   }
                 }).then((res)=>{
                   console.log(res.data)
+                  if(res.data.message==='Train already exists'){
+                    alert("This train already exists")
+                    window.location.href='/admin/add_date'
+                  }
                 })
                }
                 catch(err){return console.log(err)}

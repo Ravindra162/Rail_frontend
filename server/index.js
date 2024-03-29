@@ -5,16 +5,28 @@ const cors = require('cors')
 const jwt = require('jsonwebtoken')
 const mysql = require('mysql')
 const {createPool} = require('mysql')
+const {createTransport} = require('nodemailer')
+const transporter = createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false, // Use `true` for port 465, `false` for all other ports
+    auth: {
+      user: "ravnarravnar@gmail.com",
+      pass: "wtut nslq hxwx pnwv ",
+    },
+  });
 // const pool = mysql.createPool({
 //     host:process.env.HOST,
 //     user:'ulvmgjqopj6xyagv',
 //     password:process.env.PASSWORD,
 //     database:process.env.DATABASE
 // })
+
+
 const pool = mysql.createPool({
     host:'localhost',
-    user:'ravindra',
-    password:'password',
+    user:'root',
+    password:'Ravindra@562',
     database:'railway'
 })
 
@@ -52,7 +64,7 @@ app.post('/api/register', async (req, res) => {
             res.json({message:'User Already Exists'})
         }
         else {
-            pool.query(`insert into users (role,username,password,email) values (1,?,?,?)`,[username,password,email],(err,result,fields)=>{
+            pool.query(`insert into users (role,username,password,email) values (2,?,?,?)`,[username,password,email],(err,result,fields)=>{
                   if(err){
                       res.json({message:err.message})
                   }
@@ -64,7 +76,7 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login',async (req,res)=>{
     const {email,password} = req.body
     console.log(email)
-    pool.query(`select * from users where email=?`,[email],(err,result,fields)=>{
+    pool.query(`SELECT * FROM users WHERE email=?`,[email],(err,result,fields)=>{
        if(err) return err;
        if(result.length===0)return res.json({message:"No User Exists"})
         if(result[0]){
@@ -136,9 +148,13 @@ app.get('/api/search',(req,res)=>{
     console.log('destination  - '+dest)
     console.log('date - '+date)
     pool.query(`
-    SELECT  t1.train_number,t1.train_name,TIME(r2.arrival_time) AS
-    sourceTime,DATE(r2.arrival_time) AS
-    sourceDate,TIME(r1.arrival_time) AS destinationTime, DATE(r1.arrival_time) AS destinationDate,
+    SELECT  
+    t1.train_number,
+    t1.train_name,
+    TIME(r2.arrival_time) AS sourceTime,
+    DATE(r2.arrival_time) AS sourceDate,
+    TIME(r1.arrival_time) AS destinationTime,
+    DATE(r1.arrival_time) AS destinationDate,
     c.class_type,    
     c.seats_available AS available_tickets,    
     c.ticket_price 
@@ -154,7 +170,6 @@ app.get('/api/search',(req,res)=>{
         if(err)
         return console.log(err)
         if(result.length){
-            // console.log(result)
             var new_result = arrangeData(result)
             console.log(new_result[0])
             
@@ -174,18 +189,31 @@ app.get('/api/search',(req,res)=>{
 
 })
 
-  app.post('/api/payment',(req,res)=>{
-    const {userId,ticketInfo,passengers} = req.body
+  app.post('/api/payment',authMiddleware,(req,res)=>{
+    const email = req.user.email
+    console.log(email)
+    pool.query(`SELECT user_id from users where email=?`,[email],(err,results)=>{
+        if(err) return err
+        const {ticketInfo,passengers,payment} = req.body
+    console.log("User - ",results[0].user_id)
     console.log(ticketInfo)
     console.log(passengers)
-    pool.query(`INSERT INTO payment (payment_amount, date, method, user_id,status)
-                VALUES (?, NOW(), 'NETBANKING',?,1);`,[ticketInfo.price*ticketInfo.passengerCount,userId],(err,result,fields)=>{
+    console.log("payment : "+payment)
+    pool.query(`
+    
+    INSERT INTO payment (payment_amount, date, method, user_id,status)
+    VALUES (?, NOW(), ?,?,1);`,
+
+    [ticketInfo.price*ticketInfo.passengerCount,payment,results[0].user_id],
+    (err,result,fields)=>{
                     if(err)return console.log(err)
                     console.log(result.insertId)
                     res.json({
                      isDone:true,
                      payment_id:result.insertId})
                 })
+    })
+    
   })
 
 
@@ -237,12 +265,23 @@ function generateCompartment(class_type){
 
 
 
-app.post('/api/book-ticket', (req, res) => {
-    const ticket = req.body.ticketDetails;
-    const userId = req.body.userId;
+app.post('/api/book-ticket', authMiddleware,async (req, res) => {
+    const user = req.user.email
+    pool.query(`SELECT user_id from users where email=?`,[user],(err,resultss)=>{
+        const ticket = req.body.ticketDetails;
+    console.log("Bookings userId : ",resultss[0].user_id)
     const passengers = req.body.passengers;
     const crucks = req.body.crucks;
     const { payment_id } = req.body;
+    let receiverMail 
+    const passengersList = passengers.map(passenger => passenger.passengerName).join(', ');
+
+    pool.query(`SELECT email from users where user_id=?`,[resultss[0].user_id],(err,results)=>{
+        if(err)return console.log(err)
+        console.log("Email - ",results[0]);
+    receiverMail = results[0].email
+    })
+    let passengerIds
     
     let offsetDays;
     let startDateTime;
@@ -251,136 +290,245 @@ app.post('/api/book-ticket', (req, res) => {
     
     pool.getConnection((err, connection) => {
         if (err) {
-            return console.error(err);
+            console.error(err);
+            return res.status(500).send("Internal Server Error");
         }
         
         connection.beginTransaction((err) => {
             if (err) {
-                return console.error(err);
+                console.error(err);
+                return res.status(500).send("Internal Server Error");
             }
             
             // QUERY - 1: Get offsetDays and startDateTime
-            connection.query(`SELECT DAY(arrival_time) AS DAY, TIME(arrival_time) AS TIME FROM routes1 WHERE train_number=? AND (curr_station=? OR curr_station=?)`,
+            connection.query(`
+                SELECT DAY(arrival_time) AS DAY,
+                TIME(arrival_time) AS TIME FROM routes1 
+                WHERE train_number=? AND (curr_station=? OR curr_station=?)`,
                 [ticket.trainNumber, crucks.source, crucks.destination], (err, result) => {
                     if (err) {
+                        console.error(err);
                         return connection.rollback(() => {
-                            console.error(err);
                             connection.release();
+                            return res.status(500).send("Internal Server Error");
                         });
                     }
-                    // Calculate endDateTime based on offsetDays and month logic
 
                     offsetDays = result[1].DAY - result[0].DAY;
-                    offsetDays =  result[1] - result[0]
-                    startDateTime = crucks.date+' '+result[0].TIME
-                    let currentMonth = crucks.date.substr(5,2)
-                    let currentDate = crucks.date.substr(8,2)
-                    let end_date = currentDate;
-                    
-                        if(currentMonth==='01' || currentMonth==='03' || currentMonth==='05' || currentMonth==='07' || currentMonth==='08' || currentMonth==='10' || currentMonth==='12'){
-                            if(currentDate=='31'){
-                                end_date=parseInt(end_date)
-                                end_date+=offsetDays%31
-                            }
-                        }
-                        else if(currentMonth==='04' || currentMonth==='06' || currentMonth==='09' || currentMonth==='11'){
-                               end_date=parseInt(end_date)
-                               end_date+=offsetDays%30
-                        }
-                        else if(currentMonth==='02'){
-                            end_date=parseInt(end_date)
-                            end_date+=offsetDays%28
-                        }
-                
-                    
-                    console.log('Current date : '+currentDate)
-                    console.log('Current month : '+currentMonth)
-                    console.log('StartTime : '+startDateTime)
-                  
+                    console.log("Offset Days - ",offsetDays)
 
+                    startDateTime = crucks.date + ' ' + result[0].TIME;
 
-                 
-                    endDateTime = crucks.date.substr(0,8)+end_date+' '+result[1].TIME
-                    console.log('EndTIme: ',endDateTime)
-
+                    let currentMonth = parseInt(crucks.date.substr(5, 2));
+                    let currentDate = parseInt(crucks.date.substr(8, 2));
+                    let daysInMonth = new Date(crucks.date).getDate();
                     
+                    // Calculate end date based on offset days
+                    let end_date = currentDate + offsetDays;
+                    console.log('end_date : ',end_date)
+                   
+                    endDateTime = crucks.date.substr(0, 8) + end_date + ' ' + result[1].TIME;
+                    console.log('endDateTIme ',endDateTime)
                     console.log('Start Time: ', startDateTime);
                     console.log('End Time: ', endDateTime);
                     
                     // QUERY - 2: Get PNR
-                    connection.query('SELECT PNR FROM ticket', (err, res) => {
+                    connection.query('SELECT PNR FROM ticket', (err, pnrResult) => {
                         if (err) {
+                            console.error(err);
                             return connection.rollback(() => {
-                                console.error(err);
                                 connection.release();
+                                return res.status(500).send("Internal Server Error");
                             });
                         }
                         
-                        generatedPNR = generatePNR(res);
+                        generatedPNR = generatePNR(pnrResult);
                         
                         // QUERY - 3: Insert Passengers
-                        connection.query('INSERT INTO passenger (first_name, last_name, age, gender, contact) VALUES ?', [passengers.map(passenger => [passenger.passengerName, passenger.passengerName, passenger.Age, passenger.Gender, passenger.ContactNo])], (err, result) => {
+                        connection.query('INSERT INTO passenger (first_name, last_name, age, gender, contact) VALUES ?', [passengers.map(passenger => [passenger.passengerName, passenger.passengerName, passenger.Age, passenger.Gender, passenger.ContactNo])], (err, passengerResult) => {
                             if (err) {
+                                console.error(err);
                                 return connection.rollback(() => {
-                                    console.error(err);
                                     connection.release();
+                                    return res.status(500).send("Internal Server Error");
                                 });
-                                
                             }
-                            let insertedPassengerIds = []
-                                let lastInsertedId = result.insertId;
-                               let numberOfPassengersInserted = passengers.length;
 
-                              // Store the inserted IDs in the array
-                               for (let i = 0; i < numberOfPassengersInserted; i++) {
-                              insertedPassengerIds.push(lastInsertedId + i);
-                              console.log(insertedPassengerIds)
-                                       }
+                            insertedPassengerIds = [];
+                            let lastInsertedId = passengerResult.insertId;
+                            let numberOfPassengersInserted = passengers.length;
+
+                            // Store the inserted IDs in the array
+                            for (let i = 0; i < numberOfPassengersInserted; i++) {
+                                insertedPassengerIds.push(lastInsertedId + i);
+                            }
                             console.log('Passengers Inserted');
-
                             
                             // QUERY - 4: Insert Ticket
                             connection.query(`INSERT INTO ticket (PNR, train_number, source, destination, start_date, end_date, class, bookedBy_id, payment_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                                [generatedPNR, ticket.trainNumber, crucks.source, crucks.destination, startDateTime, endDateTime, ticket.class, userId, payment_id], (err, res) => {
+                                [generatedPNR, ticket.trainNumber, crucks.source, crucks.destination, startDateTime, endDateTime, ticket.class, resultss[0].user_id, payment_id], (err, ticketResult) => {
                                     if (err) {
+                                        console.error(err);
                                         return connection.rollback(() => {
-                                            console.error(err);
                                             connection.release();
+                                            return res.status(500).send("Internal Server Error");
                                         });
-                                        
                                     }
                                     
-                                    console.log('Inserted Id: ', res.insertId);
-                                    let bookingValues = []
+                                    console.log('Inserted Ticket Id: ', ticketResult.insertId);
+                                    let bookingValues = [];
                                     insertedPassengerIds.forEach(passenger => {
-                                        bookingValues.push({trainNumber:ticket.trainNumber, class:ticket.class, Date:startDateTime, seat:generateSeat(ticket.class), compartment:generateCompartment(ticket.class), PNR:generatedPNR, passenger_id:passenger});
+                                        bookingValues.push({
+                                            trainNumber: ticket.trainNumber,
+                                            class: ticket.class,
+                                            Date: startDateTime,
+                                            seat: generateSeat(ticket.class),
+                                            compartment: generateCompartment(ticket.class),
+                                            PNR: generatedPNR,
+                                            passenger_id: passenger
+                                        });
                                     });
-                                    console.log(bookingValues)
+                                    console.log(bookingValues);
                                     
-                                    // QUERY - 5: Insert Payment
-                                    connection.query(`INSERT INTO bookings
-                                                     (train_number, class_type, date, seat_number, compartment_name, PNR, passenger_id) VALUES
-                                                     ?`,
-                                        [bookingValues.map(booking=>[booking.trainNumber,booking.class,booking.Date,booking.seat,booking.compartment,booking.PNR,booking.passenger_id])], (err, result) => {
+                                    // QUERY - 5: Insert Bookings
+                                    connection.query(`INSERT INTO bookings (train_number, class_type, date, seat_number, compartment_name, PNR, passenger_id) VALUES ?`,
+                                        [bookingValues.map(booking => [booking.trainNumber, booking.class, booking.Date, booking.seat, booking.compartment, booking.PNR, booking.passenger_id])], async(err, bookingResult) => {
                                             if (err) {
+                                                console.error(err);
                                                 return connection.rollback(() => {
-                                                    console.error(err);
                                                     connection.release();
+                                                    return res.status(500).send("Internal Server Error");
                                                 });
                                             }
                                             
                                             console.log('Bookings Inserted');
                                             // Commit the transaction
-                                            connection.commit((err) => {
+                                            connection.commit(async(err) => {
                                                 if (err) {
+                                                    console.error(err);
                                                     return connection.rollback(() => {
-                                                        console.error(err);
                                                         connection.release();
+                                                        return res.status(500).send("Internal Server Error");
                                                     });
                                                 }
+                                                pool.query(`
                                                 
+                                                SELECT bookings.compartment_name,
+                                                bookings.seat_number,
+                                                passenger.first_name,
+                                                passenger.age
+                                                FROM bookings INNER JOIN passenger ON bookings.passenger_id=passenger.passenger_id
+                                                WHERE passenger.passenger_id IN (?)
+                                                ;
+
+                                                `,[passengerIds],(err,mailTicketDetails)=>{
+                                                    if(err)return console.log(err)
+                                                    console.log(mailTicketDetails)
+                                                })
                                                 console.log('Transaction Completed');
+                                                const info = await transporter.sendMail({
+                                                    from: '<RailQuestOfficial@gmail.com>', // sender address
+                                                    to: receiverMail, // list of receivers
+                                                    subject: "Train Ticket from RailQuest", 
+                                                    text: "Hey, How's' going", 
+                                                    html: `
+                                                    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RailQuest Ticket</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .ticket {
+            max-width: 600px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .ticket-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .ticket-details {
+            margin-bottom: 20px;
+        }
+        .ticket-details table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .ticket-details table th,
+        .ticket-details table td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .ticket-footer {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="ticket">
+    <div class="ticket-header">
+        <h1>Train Ticket from RailQuest</h1>
+    </div>
+    <div class="ticket-details">
+        <table>
+            <tr>
+                <th>Train No.</th>
+                <td>${ticket.trainNumber}</td>
+            </tr>
+            <tr>
+                <th>Train Name</th>
+                <td>Sample Express</td> <!-- Replace with actual train name -->
+            </tr>
+            <tr>
+                <th>From</th>
+                <td>${crucks.source}</td>
+            </tr>
+            <tr>
+                <th>To</th>
+                <td>${crucks.destination}</td>
+            </tr>
+            <tr>
+                <th>Departure</th>
+                <td>${startDateTime}</td>
+            </tr>
+            <tr>
+                <th>Arrival</th>
+                <td>${endDateTime}</td>
+            </tr>
+            <tr>
+                <th>Class</th>
+                <td>${ticket.class}</td>
+            </tr>
+            <tr>
+                <th>Passenger(s)</th>
+                <td>${passengersList}</td>
+            </tr>
+        </table>
+    </div>
+    <div class="ticket-footer">
+        <p>Thank you for choosing RailQuest!</p>
+    </div>
+</div>
+
+</body>
+</html>
+`
+// html body
+                                                  });
+                                                
+                                                  console.log("Message sent: %s", info.messageId);
+                                                
                                                 connection.release();
+                                                res.status(200).send("Transaction Completed");
+                                                
                                             });
                                         });
                                 });
@@ -389,7 +537,11 @@ app.post('/api/book-ticket', (req, res) => {
                 });
         });
     });
+    })
+   
+   
 });
+
 
 
 //     //Points to be done
@@ -430,80 +582,102 @@ app.post('/api/admin/addTrain',authMiddleware,(req,res)=>{
     console.log(routes)
     console.log(compartments)
     console.log(classData)
-    pool.getConnection((err,connection)=>{
-        if(err)throw err
-        connection.beginTransaction((err)=>{
-            if(err)return console.log(err)
-            connection.query(`INSERT INTO trains1 (train_number,train_name,source,destination) VALUES (?,?,?,?)`,
-        [trainData.trainNumber,trainData.trainName,trainData.source,trainData.destination],(err,res)=>{
-                if(err){
-                    return connection.rollback(() => {
-                        console.error(err);
-                        connection.release();
-                    });
-                }
-                console.log('Inserted',res)
-                connection.query(`INSERT INTO routes1 (train_number,curr_station,stop_no,arrival_time,departure_time) values ?`,
-                [routes.map((route,index)=>{
-                    if(index===routes.length-1)
-                    return [trainData.trainNumber,route.stationName,route.stopNo,route.arrivalDate+' '+route.arrivalTime,null]
-                    else return [trainData.trainNumber,route.stationName,route.stopNo,route.arrivalDate+' '+route.arrivalTime,route.departureDate+' '+route.departureTime]
-                })],(err,result)=>{
-                    if(err) return connection.rollback(() => {
-                        console.error(err);
-                        connection.release();
-                    });
-                    console.log(result)
-                  
-                    connection.query(`INSERT INTO compartment (compartment_name,capacity,train_number,class_type) values ?`,
-                    [compartments.map(compartment=>[compartment.compartmentName,compartment.capacity,trainData.trainNumber,compartment.class])],(err,compartments)=>{
-                        if(err)return connection.rollback(() => {
-                            console.error(err);
-                            connection.release();
-                        });
-                        console.log(compartments)
-                        connection.query(`SELECT train_number, class_type, SUM(capacity) AS total_seats_available
-                        FROM compartment
-                        WHERE train_number = ?
-                        GROUP BY train_number, class_type;`,[trainData.trainNumber],(err,list)=>{
-                            if(err) throw err
-                            console.log(list)
-                            const getPriceFromClass = (classData, targetClass) => {
-                                const classObject = classData.find(item => item.class === targetClass);
-                                return classObject ? classObject.price : null;
-                              };
-                              for(var m=0;m<list.length;m++)
-                              connection.query(`INSERT into class (train_number,class_type,seats_available,ticket_price,train_date)
-                                 values (?,?,?,?,?)`,[trainData.trainNumber,list[m].class_type,list[m].total_seats_available,getPriceFromClass(classData,list[m].class_type),trainData.startDate+' 00:00:00'],
-                                 (err,done)=>{
-                                    if(err)console.log(err)
-                                    console.log('Class inserted - '+done)
-                                 })
-                            connection.commit((err) => {
-                                if (err) {
-                                    return connection.rollback(() => {
-                                        console.error(err);
-                                        connection.release();
-                                    });
-                                }
-                                
-                                console.log('Transaction Completed');
-                                connection.release();})  
-                        //     connection.query(`INSERT INTO class (train_number,class,seats_available,ticket_price,train_date)
-                        //   VALUES ? 
-                        //  `)
-                        })
-                         
-                        
-                    }
-                    )
-                })
-               
-        })
 
-        })
+    pool.query(`SELECT train_number from routes1 where train_number=?`,[trainData.trainNumber],(err,response)=>{
+        if(response.length){
+           
+
+            res.json({
+                message:'Train already exists'
+            })
+
+
+
+        }
+        else{
+
+
+            pool.getConnection((err,connection)=>{
+                if(err)throw err
+                connection.beginTransaction((err)=>{
+                    if(err)return console.log(err)
+                    connection.query(`INSERT INTO trains1 (train_number,train_name,source,destination) VALUES (?,?,?,?)`,
+                [trainData.trainNumber,trainData.trainName,trainData.source,trainData.destination],(err,res)=>{
+                        if(err){
+                            return connection.rollback(() => {
+                                console.error(err);
+                                connection.release();
+                            });
+                        }
+                        console.log('Inserted',res)
+                        connection.query(`INSERT INTO routes1 (train_number,curr_station,stop_no,arrival_time,departure_time) values ?`,
+                        [routes.map((route,index)=>{
+                            if(index===routes.length-1)
+                            return [trainData.trainNumber,route.stationName,route.stopNo,route.arrivalDate+' '+route.arrivalTime,null]
+                            else return [trainData.trainNumber,route.stationName,route.stopNo,route.arrivalDate+' '+route.arrivalTime,route.departureDate+' '+route.departureTime]
+                        })],(err,result)=>{
+                            if(err) return connection.rollback(() => {
+                                console.error(err);
+                                connection.release();
+                            });
+                            console.log(result)
+                          
+                            connection.query(`INSERT INTO compartment (compartment_name,capacity,train_number,class_type) values ?`,
+                            [compartments.map(compartment=>[compartment.compartmentName,compartment.capacity,trainData.trainNumber,compartment.class])],(err,compartments)=>{
+                                if(err)return connection.rollback(() => {
+                                    console.error(err);
+                                    connection.release();
+                                });
+                                console.log(compartments)
+                                connection.query(`SELECT train_number, class_type, SUM(capacity) AS total_seats_available
+                                FROM compartment
+                                WHERE train_number = ?
+                                GROUP BY train_number, class_type;`,[trainData.trainNumber],(err,list)=>{
+                                    if(err) throw err
+                                    console.log(list)
+                                    const getPriceFromClass = (classData, targetClass) => {
+                                        const classObject = classData.find(item => item.class === targetClass);
+                                        return classObject ? classObject.price : null;
+                                      };
+                                      for(var m=0;m<list.length;m++)
+                                      connection.query(`INSERT into class (train_number,class_type,seats_available,ticket_price,train_date)
+                                         values (?,?,?,?,?)`,[trainData.trainNumber,list[m].class_type,list[m].total_seats_available,getPriceFromClass(classData,list[m].class_type),trainData.startDate+' 00:00:00'],
+                                         (err,done)=>{
+                                            if(err)console.log(err)
+                                            console.log('Class inserted - '+done)
+                                         })
+                                    connection.commit((err) => {
+                                        if (err) {
+                                            return connection.rollback(() => {
+                                                console.error(err);
+                                                connection.release();
+                                            });
+                                        }
+                                        
+                                        console.log('Transaction Completed');
+                                        connection.release();})  
+                                //     connection.query(`INSERT INTO class (train_number,class,seats_available,ticket_price,train_date)
+                                //   VALUES ? 
+                                //  `)
+                                })
+                                 
+                                
+                            }
+                            )
+                        })
+                       
+                })
+        
+                })
+            })
+
+
+
+        }
     })
+
     
+    console.log('Hello World')
     })
 
 app.post('/api/fetch-ticket',authMiddleware,(req,res)=>{
@@ -546,7 +720,35 @@ pool.query(`
 })
 
 
-    
+app.post('/api/admin/add_date',(req,res)=>{
+    console.log(req.body)
+    const {trainNumber,classData,date} =  req.body
+    classData.forEach(classDetail => {
+        const class_type = classDetail.class;
+        const ticket_price = classDetail.price;
+
+        // Insert the class detail without specifying seats_available
+        pool.query(`
+            INSERT INTO class (train_number, class_type,seats_available, ticket_price, train_date)
+            VALUES (?, ?,?,?, ?)
+        `, [trainNumber, class_type, 10,ticket_price, date], (error, results) => {
+            if (error) {
+                console.error('Error inserting class detail:', error);
+                return res.status(500).send('Internal Server Error');
+            }
+            pool.query(`
+            UPDATE class c
+            JOIN (
+            SELECT comp.train_number, comp.class_type, SUM(comp.capacity) AS total_seats
+            FROM compartment comp
+            GROUP BY comp.train_number, comp.class_type
+            ) comp_totals ON c.train_number = comp_totals.train_number AND c.class_type = comp_totals.class_type
+            SET c.seats_available = comp_totals.total_seats WHERE c.train_date=?
+            `,[date])
+           console.log(results)
+        });
+    });
+})
    
 
 
